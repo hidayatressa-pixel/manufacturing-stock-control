@@ -28,9 +28,10 @@ import {
 import { Login } from "./components/Login";
 import { ItemModal } from "./components/ItemModal";
 import {
-  OperationalModule,
   ReportModule,
 } from "./components/OperationalModule";
+import {LinkedModule,LinkedOrders,LinkedReport} from "./components/LinkedModules";
+import {useDemoDatabase} from "./demoDatabase";
 import { initialItems, orders, transactions } from "./demo";
 import { canManageItems, canView } from "./permissions";
 import type { Item, Session, View } from "./types";
@@ -123,10 +124,10 @@ const title: Record<View, [string, string]> = {
 };
 
 export default function App() {
+  const {db,saveItem}=useDemoDatabase();
   const [session, setSession] = useState<Session | null>(null),
     [view, setView] = useState<View>("dashboard"),
     [mobile, setMobile] = useState(false),
-    [items, setItems] = useState(initialItems),
     [edit, setEdit] = useState<Item | null | undefined>(undefined),
     [toast, setToast] = useState("");
   if (!session) return <Login onLogin={setSession} />;
@@ -229,10 +230,10 @@ export default function App() {
             )}
           </div>
           {view === "dashboard" ? (
-            <Dashboard session={session} items={items} go={go} />
+            <Dashboard session={session} items={db.items} go={go} />
           ) : view === "items" ? (
             <Items
-              items={items}
+              items={db.items}
               query=""
               onEdit={setEdit}
               canEdit={canManageItems(session.role)}
@@ -240,13 +241,13 @@ export default function App() {
           ) : view === "traceability" ? (
             <Traceability />
           ) : view === "orders" ? (
-            <Orders role={session.role} go={go} onNotify={setToast} />
+            <LinkedOrders role={session.role} go={go} onNotify={setToast} />
           ) : view === "settings" ? (
             <SettingsView />
           ) : view === "reports" ? (
-            <ReportModule onNotify={setToast} />
+            <LinkedReport onNotify={setToast} />
           ) : (
-            <OperationalModule
+            <LinkedModule
               view={view}
               role={session.role}
               onNotify={setToast}
@@ -259,14 +260,7 @@ export default function App() {
           item={edit}
           onClose={() => setEdit(undefined)}
           onSave={(d) => {
-            setItems((old) =>
-              edit
-                ? old.map((i) => (i.id === edit.id ? { ...i, ...d } : i))
-                : [
-                    { ...d, id: crypto.randomUUID(), stock: 0, lots: 0 },
-                    ...old,
-                  ],
-            );
+            saveItem(edit?{...edit,...d}:{...d,id:crypto.randomUUID(),stock:0,lots:0});
             setEdit(undefined);
             setToast(edit ? "Item updated" : "Item created");
           }}
@@ -582,6 +576,13 @@ function Orders({role,go,onNotify}:{role:Session["role"];go:(view:View)=>void;on
   );
 }
 function Traceability() {
+  const {db}=useDemoDatabase();
+  const [lotQuery,setLotQuery]=useState("FG-20260911-0003");
+  const [searched,setSearched]=useState("FG-20260911-0003");
+  const found=db.lots.find(l=>l.lotNo.toLowerCase()===searched.toLowerCase());
+  const result=found?db.results.find(r=>r.fgLotId===found.id):undefined;
+  const linkedWo=result?db.orders.find(w=>w.id===result.woId):undefined;
+  const linkedIssues=linkedWo?db.issues.filter(i=>i.woId===linkedWo.id):db.issues.filter(i=>i.lines.some(x=>x.lotId===found?.id));
   return (
     <section className="trace">
       <article className="panel trace-search">
@@ -589,42 +590,19 @@ function Traceability() {
         <h2>Follow any LOT end to end</h2>
         <div>
           <Activity />
-          <input defaultValue="FG-20260911-0003" />
-          <button>Trace LOT</button>
+          <input value={lotQuery} onChange={e=>setLotQuery(e.target.value)} />
+          <button onClick={()=>setSearched(lotQuery.trim())}>Trace LOT</button>
         </div>
         <p>Search a raw-material or finished-goods LOT.</p>
       </article>
       <article className="panel">
-        <PanelHead
-          title="Backward trace result"
-          note="FG-20260911-0003 · 196 PCS"
-        />
-        <div className="flow">
-          <Node
-            type="RAW MATERIAL LOT"
-            no="RM-260907-A"
-            detail="ABS Resin · 48 KG"
-          />
-          <ChevronRight />
-          <Node
-            type="MATERIAL ISSUE"
-            no="MI-20260911-0004"
-            detail="11 Sep · 08:42"
-          />
-          <ChevronRight />
-          <Node
-            type="PRODUCTION ORDER"
-            no="WO-20260911-0001"
-            detail="Rear Combination Lamp"
-          />
-          <ChevronRight />
-          <Node
-            type="FINISHED GOODS LOT"
-            no="FG-20260911-0003"
-            detail="196 PCS · Released"
-            active
-          />
-        </div>
+        <PanelHead title="Transaction genealogy" note={found?`${found.lotNo} · ${found.qty} ${db.items.find(i=>i.id===found.itemId)?.uom}`:"LOT not found"}/>
+        {found?<div className="flow">
+          <Node type={found.itemId===linkedWo?.productId?"FINISHED GOODS LOT":"MATERIAL LOT"} no={found.lotNo} detail={`${db.items.find(i=>i.id===found.itemId)?.name} · ${found.source}`} active/>
+          <ChevronRight/><Node type="MATERIAL ISSUE" no={linkedIssues.map(i=>i.no).join(", ")||"No material issue"} detail={`${linkedIssues.flatMap(i=>i.lines).length} linked issue lines`}/>
+          <ChevronRight/><Node type="PRODUCTION ORDER" no={linkedWo?.no||db.orders.find(w=>linkedIssues.some(i=>i.woId===w.id))?.no||"No linked WO"} detail={linkedWo?db.items.find(i=>i.id===linkedWo.productId)?.name||"":"Forward material usage"}/>
+          <ChevronRight/><Node type="PRODUCTION RESULT" no={result?.no||"Pending / forward trace"} detail={result?`GOOD ${result.good} · REJECT ${result.reject}`:"No FG result linked"}/>
+        </div>:<div className="empty-trace">No LOT matches <b className="mono">{searched}</b>. Use a LOT number shown in Inventory.</div>}
       </article>
     </section>
   );
@@ -735,6 +713,7 @@ function GenericView({ view }: { view: View }) {
   );
 }
 function SettingsView() {
+  const {reset}=useDemoDatabase();
   return (
     <section className="settings-grid">
       <article className="panel">
@@ -810,7 +789,7 @@ function SettingsView() {
         <button
           onClick={() => {
             if (confirm("Reset seluruh data demo di browser ini?")) {
-              localStorage.removeItem("msc-demo-v1");
+              reset();
               location.reload();
             }
           }}
