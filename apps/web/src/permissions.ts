@@ -5,6 +5,7 @@ const access:Record<Role,View[]>={
  PRODUCTION:["dashboard","production","orders","traceability"],
  DELIVERY:["dashboard","delivery","inventory","traceability"],
  SUPERVISOR:["dashboard","inventory","orders","requests","issues","production","delivery","traceability","reports","audit"],
+ MANAGER:["dashboard","inventory","orders","requests","issues","production","delivery","traceability","reports","audit"],
  ADMIN:["dashboard","items","inventory","boms","orders","requests","issues","production","delivery","traceability","reports","settings","audit"]
 };
 export const canView=(role:Role,view:View)=>access[role].includes(view);
