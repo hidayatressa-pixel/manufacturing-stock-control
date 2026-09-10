@@ -2,18 +2,17 @@
 
 MSC is a self-hosted manufacturing stock and production-control system. Its core rule is simple: **stock is never edited directly; every movement is posted from a valid document into an auditable ledger.**
 
-## Current implementation — v0.1.0
+## Current implementation — v1.0.0
 
 - React + TypeScript + Vite operational interface.
 - Five Demo Mode roles with role-specific navigation.
 - Admin Item Master create/edit workflow.
-- Dashboard, Production Order, Inventory, BOM, MR, MI, Production Result, LOT Traceability, Stock Opname, Reports, Configuration, and Audit structures.
-- Express REST API foundation with centralized authorization.
-- MySQL/Prisma relational schema.
+- Interactive Dashboard, Item Master, Inventory, BOM, WO, MR, partial MI, Production Result, LOT Traceability, Stock Opname, Reports, Configuration, and Audit Log demo workflows.
+- Express REST API with JWT authentication and centralized capability authorization.
+- MySQL/Prisma relational schema plus committed initial SQL migration and repeatable demo seed.
 - Isolated Demo and Production database configuration.
-- Stock Posting Service boundary with idempotency and negative-stock protection.
-
-This is the reviewable foundation slice. Stock-affecting modules beyond Item Master remain explicit workflow shells until their atomic posting services are implemented and tested.
+- Central Stock Posting Service with serializable transactions, idempotency, negative-stock protection, daily document numbering, and referenced reversals.
+- CSV exports, responsive layouts, and GitHub Pages deployment for the standalone Demo Mode UI.
 
 ## Demo accounts
 
@@ -25,7 +24,7 @@ This is the reviewable foundation slice. Stock-affecting modules beyond Item Mas
 | Manager | `MGR-4001` | `4567` |
 | Admin | `admin01` | `8888` |
 
-Demo authentication in the current UI is intentionally evaluation-only. Production credentials will be verified by the API and stored as Argon2id hashes.
+Demo authentication is intentionally evaluation-only and uses browser-persisted demo data. Production Mode authenticates through the API and stores Argon2id password hashes in MySQL. Demo and Production data never share a database.
 
 ## Local review
 
@@ -33,11 +32,17 @@ Demo authentication in the current UI is intentionally evaluation-only. Producti
 cp .env.example .env
 npm install
 npm run db:generate
+npm run db:migrate
+npm run db:seed
 npm run build
 npm run dev
 ```
 
-Use `docker compose up -d mysql` to start the optional local MySQL service. The frontend review build does not require a database connection; API data operations do.
+Use `docker compose up -d mysql` to start the optional local MySQL service. The static Demo Mode frontend does not require a database; Production API operations do.
+
+## API workflow surface
+
+Authenticated endpoints cover master data, inventory documents and ledger, BOMs, WO create/release, material requests, partial material issues, production results and rejects, LOT traceability, stock opname posting, referenced reversal, reports, activity logs, users, and system settings. See [docs/AUDIT_REPORT.md](docs/AUDIT_REPORT.md) for the role and control audit.
 
 ## Security boundary
 
@@ -46,4 +51,4 @@ Use `docker compose up -d mysql` to start the optional local MySQL service. The 
 - Manager is the highest operational role but is not a system administrator.
 - Posted stock history is corrected through reversals, not edited or deleted.
 - Direct Item deletion is rejected when ledger history exists.
-
+- Production mode requires a MySQL connection, non-default JWT secrets, and HTTPS at the reverse proxy.

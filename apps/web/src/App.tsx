@@ -1,19 +1,821 @@
-import{useMemo,useState}from"react";import{Activity,ArrowDownUp,BarChart3,Boxes,CheckCircle2,ChevronRight,ClipboardCheck,ClipboardList,Database,Factory,FileClock,LayoutDashboard,LogOut,Menu,PackageCheck,PackageSearch,Plus,RefreshCcw,Search,Settings,ShieldCheck,TriangleAlert,Users,X}from"lucide-react";import{Login}from"./components/Login";import{ItemModal}from"./components/ItemModal";import{initialItems,orders,transactions}from"./demo";import{canManageItems,canView}from"./permissions";import type{Item,Session,View}from"./types";
+import { useMemo, useState } from "react";
+import {
+  Activity,
+  ArrowDownUp,
+  BarChart3,
+  Boxes,
+  CheckCircle2,
+  ChevronRight,
+  ClipboardCheck,
+  ClipboardList,
+  Database,
+  Factory,
+  FileClock,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  PackageCheck,
+  PackageSearch,
+  Plus,
+  RefreshCcw,
+  Search,
+  Settings,
+  ShieldCheck,
+  TriangleAlert,
+  Users,
+  X,
+} from "lucide-react";
+import { Login } from "./components/Login";
+import { ItemModal } from "./components/ItemModal";
+import {
+  OperationalModule,
+  ReportModule,
+} from "./components/OperationalModule";
+import { initialItems, orders, transactions } from "./demo";
+import { canManageItems, canView } from "./permissions";
+import type { Item, Session, View } from "./types";
 
-const navigation:{section:string;items:{id:View;label:string;icon:typeof Boxes}[]}[]=[{section:"OVERVIEW",items:[{id:"dashboard",label:"Dashboard",icon:LayoutDashboard}]},{section:"STOCK CONTROL",items:[{id:"items",label:"Item Master",icon:Boxes},{id:"inventory",label:"Inventory",icon:PackageSearch},{id:"boms",label:"Bill of Materials",icon:ClipboardList}]},{section:"PRODUCTION",items:[{id:"orders",label:"Production Orders",icon:Factory},{id:"requests",label:"Material Requests",icon:ClipboardCheck},{id:"issues",label:"Material Issues",icon:ArrowDownUp},{id:"results",label:"Production Results",icon:PackageCheck}]},{section:"ASSURANCE",items:[{id:"traceability",label:"LOT Traceability",icon:Activity},{id:"opname",label:"Stock Opname",icon:ClipboardList},{id:"reports",label:"Reports",icon:BarChart3}]},{section:"SYSTEM",items:[{id:"settings",label:"Configuration",icon:Settings},{id:"audit",label:"Activity Logs",icon:FileClock}]}];
-const title:Record<View,[string,string]>={dashboard:["Operational Dashboard","Live manufacturing stock and production position."],items:["Item Master","Controlled material and product definitions."],inventory:["Inventory","Current stock derived from posted ledger transactions."],boms:["Bill of Materials","Versioned component standards for production."],orders:["Production Orders","Release work and track output against target."],requests:["Material Requests","Required, requested, issued, and remaining quantities."],issues:["Material Issues","Warehouse LOT issue against released production orders."],results:["Production Results","GOOD, REJECT, and finished-goods LOT posting."],traceability:["LOT Traceability","Follow material genealogy forward or backward."],opname:["Stock Opname","Physical reconciliation with controlled adjustments."],reports:["Reports","Operational records with transaction-level filters."],settings:["System Configuration","Company, users, branding, numbering, and setup."],audit:["Activity Logs","Who changed what, when, and against which reference."]};
+const navigation: {
+  section: string;
+  items: { id: View; label: string; icon: typeof Boxes }[];
+}[] = [
+  {
+    section: "OVERVIEW",
+    items: [{ id: "dashboard", label: "Dashboard", icon: LayoutDashboard }],
+  },
+  {
+    section: "STOCK CONTROL",
+    items: [
+      { id: "items", label: "Item Master", icon: Boxes },
+      { id: "inventory", label: "Inventory", icon: PackageSearch },
+      { id: "boms", label: "Bill of Materials", icon: ClipboardList },
+    ],
+  },
+  {
+    section: "PRODUCTION",
+    items: [
+      { id: "orders", label: "Production Orders", icon: Factory },
+      { id: "requests", label: "Material Requests", icon: ClipboardCheck },
+      { id: "issues", label: "Material Issues", icon: ArrowDownUp },
+      { id: "results", label: "Production Results", icon: PackageCheck },
+    ],
+  },
+  {
+    section: "ASSURANCE",
+    items: [
+      { id: "traceability", label: "LOT Traceability", icon: Activity },
+      { id: "opname", label: "Stock Opname", icon: ClipboardList },
+      { id: "reports", label: "Reports", icon: BarChart3 },
+    ],
+  },
+  {
+    section: "SYSTEM",
+    items: [
+      { id: "settings", label: "Configuration", icon: Settings },
+      { id: "audit", label: "Activity Logs", icon: FileClock },
+    ],
+  },
+];
+const title: Record<View, [string, string]> = {
+  dashboard: [
+    "Operational Dashboard",
+    "Live manufacturing stock and production position.",
+  ],
+  items: ["Item Master", "Controlled material and product definitions."],
+  inventory: [
+    "Inventory",
+    "Current stock derived from posted ledger transactions.",
+  ],
+  boms: ["Bill of Materials", "Versioned component standards for production."],
+  orders: [
+    "Production Orders",
+    "Release work and track output against target.",
+  ],
+  requests: [
+    "Material Requests",
+    "Required, requested, issued, and remaining quantities.",
+  ],
+  issues: [
+    "Material Issues",
+    "Warehouse LOT issue against released production orders.",
+  ],
+  results: [
+    "Production Results",
+    "GOOD, REJECT, and finished-goods LOT posting.",
+  ],
+  traceability: [
+    "LOT Traceability",
+    "Follow material genealogy forward or backward.",
+  ],
+  opname: [
+    "Stock Opname",
+    "Physical reconciliation with controlled adjustments.",
+  ],
+  reports: ["Reports", "Operational records with transaction-level filters."],
+  settings: [
+    "System Configuration",
+    "Company, users, branding, numbering, and setup.",
+  ],
+  audit: [
+    "Activity Logs",
+    "Who changed what, when, and against which reference.",
+  ],
+};
 
-export default function App(){const[session,setSession]=useState<Session|null>(null),[view,setView]=useState<View>("dashboard"),[mobile,setMobile]=useState(false),[items,setItems]=useState(initialItems),[edit,setEdit]=useState<Item|null|undefined>(undefined),[toast,setToast]=useState("");if(!session)return <Login onLogin={setSession}/>;const go=(v:View)=>{setView(v);setMobile(false)};const allowed=navigation.map(g=>({...g,items:g.items.filter(i=>canView(session.role,i.id))})).filter(g=>g.items.length);return <div className="shell"><aside className={mobile?"sidebar open":"sidebar"}><div className="brand"><span><Boxes/></span><div><b>MSC</b><small>MINI ERP</small></div><button className="close" onClick={()=>setMobile(false)}><X/></button></div><div className="plant"><i/><div><b>Astra Demo Plant</b><small>DEMO DATABASE</small></div></div><nav>{allowed.map(g=><div key={g.section}><label>{g.section}</label>{g.items.map(i=><button key={i.id} className={view===i.id?"active":""} onClick={()=>go(i.id)}><i.icon/><span>{i.label}</span>{view===i.id&&<ChevronRight/>}</button>)}</div>)}</nav><div className="profile"><div>{session.name.split(" ").map(x=>x[0]).join("").slice(0,2)}</div><span><b>{session.name}</b><small>{session.role}</small></span><button onClick={()=>setSession(null)} title="Logout"><LogOut/></button></div></aside><main><header><button className="menu" onClick={()=>setMobile(true)}><Menu/></button><div className="search"><Search/><input placeholder="Search transaction, item, LOT, or WO…"/></div><span className="mode"><i/>DEMO MODE</span><button className="logout-mobile" onClick={()=>setSession(null)}><LogOut/></button></header><div className="content"><div className="page-head"><div><span className="eyebrow">{session.role} WORKSPACE</span><h1>{title[view][0]}</h1><p>{title[view][1]}</p></div>{view==="items"&&canManageItems(session.role)&&<button className="primary" onClick={()=>setEdit(null)}><Plus/>New item</button>}</div>{view==="dashboard"?<Dashboard session={session} items={items} go={go}/>:view==="items"?<Items items={items} query="" onEdit={setEdit} canEdit={canManageItems(session.role)}/>:view==="traceability"?<Traceability/>:view==="orders"?<Orders/>:view==="settings"?<SettingsView/>:<GenericView view={view}/>}</div></main>{edit!==undefined&&<ItemModal item={edit} onClose={()=>setEdit(undefined)} onSave={d=>{setItems(old=>edit?old.map(i=>i.id===edit.id?{...i,...d}:i):[{...d,id:crypto.randomUUID(),stock:0,lots:0},...old]);setEdit(undefined);setToast(edit?"Item updated":"Item created")}}/>}{toast&&<div className="toast" onAnimationEnd={()=>setToast("")}><CheckCircle2/>{toast}</div>}</div>}
+export default function App() {
+  const [session, setSession] = useState<Session | null>(null),
+    [view, setView] = useState<View>("dashboard"),
+    [mobile, setMobile] = useState(false),
+    [items, setItems] = useState(initialItems),
+    [edit, setEdit] = useState<Item | null | undefined>(undefined),
+    [toast, setToast] = useState("");
+  if (!session) return <Login onLogin={setSession} />;
+  const go = (v: View) => {
+    setView(v);
+    setMobile(false);
+  };
+  const allowed = navigation
+    .map((g) => ({
+      ...g,
+      items: g.items.filter((i) => canView(session.role, i.id)),
+    }))
+    .filter((g) => g.items.length);
+  return (
+    <div className="shell">
+      <aside className={mobile ? "sidebar open" : "sidebar"}>
+        <div className="brand">
+          <span>
+            <Boxes />
+          </span>
+          <div>
+            <b>MSC</b>
+            <small>MINI ERP</small>
+          </div>
+          <button className="close" onClick={() => setMobile(false)}>
+            <X />
+          </button>
+        </div>
+        <div className="plant">
+          <i />
+          <div>
+            <b>Astra Demo Plant</b>
+            <small>DEMO DATABASE</small>
+          </div>
+        </div>
+        <nav>
+          {allowed.map((g) => (
+            <div key={g.section}>
+              <label>{g.section}</label>
+              {g.items.map((i) => (
+                <button
+                  key={i.id}
+                  className={view === i.id ? "active" : ""}
+                  onClick={() => go(i.id)}
+                >
+                  <i.icon />
+                  <span>{i.label}</span>
+                  {view === i.id && <ChevronRight />}
+                </button>
+              ))}
+            </div>
+          ))}
+        </nav>
+        <div className="profile">
+          <div>
+            {session.name
+              .split(" ")
+              .map((x) => x[0])
+              .join("")
+              .slice(0, 2)}
+          </div>
+          <span>
+            <b>{session.name}</b>
+            <small>{session.role}</small>
+          </span>
+          <button onClick={() => setSession(null)} title="Logout">
+            <LogOut />
+          </button>
+        </div>
+      </aside>
+      <main>
+        <header>
+          <button className="menu" onClick={() => setMobile(true)}>
+            <Menu />
+          </button>
+          <div className="search">
+            <Search />
+            <input placeholder="Search transaction, item, LOT, or WO…" />
+          </div>
+          <span className="mode">
+            <i />
+            DEMO MODE
+          </span>
+          <button className="logout-mobile" onClick={() => setSession(null)}>
+            <LogOut />
+          </button>
+        </header>
+        <div className="content">
+          <div className="page-head">
+            <div>
+              <span className="eyebrow">{session.role} WORKSPACE</span>
+              <h1>{title[view][0]}</h1>
+              <p>{title[view][1]}</p>
+            </div>
+            {view === "items" && canManageItems(session.role) && (
+              <button className="primary" onClick={() => setEdit(null)}>
+                <Plus />
+                New item
+              </button>
+            )}
+          </div>
+          {view === "dashboard" ? (
+            <Dashboard session={session} items={items} go={go} />
+          ) : view === "items" ? (
+            <Items
+              items={items}
+              query=""
+              onEdit={setEdit}
+              canEdit={canManageItems(session.role)}
+            />
+          ) : view === "traceability" ? (
+            <Traceability />
+          ) : view === "orders" ? (
+            <Orders />
+          ) : view === "settings" ? (
+            <SettingsView />
+          ) : view === "reports" ? (
+            <ReportModule onNotify={setToast} />
+          ) : (
+            <OperationalModule
+              view={view}
+              role={session.role}
+              onNotify={setToast}
+            />
+          )}
+        </div>
+      </main>
+      {edit !== undefined && (
+        <ItemModal
+          item={edit}
+          onClose={() => setEdit(undefined)}
+          onSave={(d) => {
+            setItems((old) =>
+              edit
+                ? old.map((i) => (i.id === edit.id ? { ...i, ...d } : i))
+                : [
+                    { ...d, id: crypto.randomUUID(), stock: 0, lots: 0 },
+                    ...old,
+                  ],
+            );
+            setEdit(undefined);
+            setToast(edit ? "Item updated" : "Item created");
+          }}
+        />
+      )}
+      {toast && (
+        <div className="toast" onAnimationEnd={() => setToast("")}>
+          <CheckCircle2 />
+          {toast}
+        </div>
+      )}
+    </div>
+  );
+}
 
-function Dashboard({session,items,go}:{session:Session;items:Item[];go:(v:View)=>void}){const low=items.filter(i=>i.stock<i.minimumStock);const cards=session.role==="PRODUCTION"?[["Production today","476 PCS","96.4% good"],["Released orders","03","2 in production"],["GOOD quantity","459 PCS","Today"],["REJECT quantity","17 PCS","3.6% reject"]]:session.role==="WAREHOUSE"?[["Raw Material","1,620 KG","38 active SKUs"],["Pending requests","04","2 partial issues"],["Low stock",String(low.length),"Needs attention"],["Issues today","648 PCS","4 transactions"]]:[["Raw Material","Rp 428.6M","38 active SKUs"],["WIP stock","1,284 PCS","6 active LOTs"],["Finished Goods","2,436 PCS","12 ready LOTs"],["Production today","476 PCS","96.4% good"]];return <><section className="kpis">{cards.map((c,i)=><article className={i===3?"accent":""} key={c[0]}><span>{c[0]}<i>{i===0?<Boxes/>:i===1?<Factory/>:i===2?<TriangleAlert/>:<BarChart3/>}</i></span><b>{c[1]}</b><small>{c[2]}</small></article>)}</section><section className="dash-grid"><article className="panel production"><PanelHead title="Production pulse" note="Target versus actual · today"/><div className="big-number"><b>476</b><span>/ 700 PCS target</span><em>68%</em></div><Progress value={68}/><div className="stats"><span>GOOD RATE<b>96.4%</b></span><span>REJECT RATE<b>3.6%</b></span><span>OPEN ORDERS<b>03</b></span></div></article><article className="panel attention"><PanelHead title="Needs attention" note={`${low.length} stock risks`}/>{low.map(i=><button key={i.id} onClick={()=>go("inventory")}><TriangleAlert/><span><b>{i.sku}</b><small>{i.minimumStock-i.stock} {i.uom} below minimum</small></span><em>{i.stock/i.minimumStock<.85?"Critical":"Low"}</em></button>)}</article></section><article className="panel"><PanelHead title="Recent stock transactions" note="Every movement is ledger-backed"/><TransactionTable/></article></>}
-function PanelHead({title,note}:{title:string;note:string}){return <div className="panel-head"><div><h2>{title}</h2><p>{note}</p></div><button>View all <ChevronRight/></button></div>}
-function Progress({value}:{value:number}){return <div className="progress"><i style={{width:`${value}%`}}/></div>}
-function TransactionTable(){return <div className="table-wrap"><table><thead><tr><th>Transaction</th><th>Type</th><th>Item / LOT</th><th>Quantity</th><th>Reference</th><th>User</th></tr></thead><tbody>{transactions.map(t=><tr key={t.no}><td><b className="mono">{t.no}</b></td><td><Tag>{t.type}</Tag></td><td><b>{t.item}</b><small>{t.lot}</small></td><td><b className={t.tone}>{t.qty}</b></td><td className="mono">{t.ref}</td><td>{t.user}</td></tr>)}</tbody></table></div>}
-function Items({items,onEdit,canEdit}:{items:Item[];query:string;onEdit:(i:Item)=>void;canEdit:boolean}){const[q,setQ]=useState("");const list=useMemo(()=>items.filter(i=>`${i.sku} ${i.name} ${i.category}`.toLowerCase().includes(q.toLowerCase())),[items,q]);return <article className="panel"><div className="toolbar"><div className="table-search"><Search/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search SKU, item, category…"/></div><button className="secondary">Download template</button><button className="secondary">Import CSV</button></div><div className="table-wrap"><table><thead><tr><th>SKU</th><th>Item</th><th>Type</th><th>Current Stock</th><th>Minimum</th><th>Status</th><th/></tr></thead><tbody>{list.map(i=><tr key={i.id}><td><b className="mono teal">{i.sku}</b></td><td><b>{i.name}</b><small>{i.category}</small></td><td><Tag>{i.type}</Tag></td><td><b>{i.stock.toLocaleString()} {i.uom}</b><small>{i.lots} LOTs</small></td><td>{i.minimumStock.toLocaleString()} {i.uom}</td><td><span className={i.stock<i.minimumStock?"status low":"status healthy"}>{i.stock<i.minimumStock?"Low stock":"Healthy"}</span></td><td>{canEdit&&<button className="text-button" onClick={()=>onEdit(i)}>Edit</button>}</td></tr>)}</tbody></table></div><footer className="table-footer">{list.length} of {items.length} items</footer></article>}
-function Orders(){return <section className="order-grid">{orders.map(o=><article className="order" key={o.no}><div><Tag>{o.status}</Tag><small>{o.due}</small></div><b className="mono teal">{o.no}</b><h2>{o.product}</h2><section><span>Target<b>{o.target} PCS</b></span><span>Actual<b>{o.actual} PCS</b></span><span>Materials<b>{o.materials}</b></span></section><Progress value={o.actual/o.target*100}/><button>Open production order <ChevronRight/></button></article>)}</section>}
-function Traceability(){return <section className="trace"><article className="panel trace-search"><span className="eyebrow">GENEALOGY SEARCH</span><h2>Follow any LOT end to end</h2><div><Activity/><input defaultValue="FG-20260911-0003"/><button>Trace LOT</button></div><p>Search a raw-material or finished-goods LOT.</p></article><article className="panel"><PanelHead title="Backward trace result" note="FG-20260911-0003 · 196 PCS"/><div className="flow"><Node type="RAW MATERIAL LOT" no="RM-260907-A" detail="ABS Resin · 48 KG"/><ChevronRight/><Node type="MATERIAL ISSUE" no="MI-20260911-0004" detail="11 Sep · 08:42"/><ChevronRight/><Node type="PRODUCTION ORDER" no="WO-20260911-0001" detail="Rear Combination Lamp"/><ChevronRight/><Node type="FINISHED GOODS LOT" no="FG-20260911-0003" detail="196 PCS · Released" active/></div></article></section>}
-function Node({type,no,detail,active}:{type:string;no:string;detail:string;active?:boolean}){return <div className={active?"node active":"node"}><span>{type}</span><b className="mono">{no}</b><small>{detail}</small></div>}
-const generic:Record<string,{icon:typeof Boxes;title:string;body:string;columns:string[]}>={inventory:{icon:Database,title:"Inventory control",body:"Stock is derived from ledger entries by item, LOT, and location. Direct quantity editing is unavailable.",columns:["Current stock","Available stock","Stock by LOT","Movement history"]},boms:{icon:ClipboardList,title:"BOM administration",body:"Active BOM versions calculate material requirements when a Production Order is released.",columns:["Parent item","Version","Standard output","Components"]},requests:{icon:ClipboardCheck,title:"Material request workflow",body:"Required, requested, issued, and remaining quantities stay linked to a released WO.",columns:["MR number","WO reference","Requested","Remaining"]},issues:{icon:ArrowDownUp,title:"Warehouse material issue",body:"Posting selects an RM LOT, prevents negative stock, and creates an immutable OUT entry.",columns:["MI number","RM LOT","Issue quantity","Posted by"]},results:{icon:PackageCheck,title:"Production result posting",body:"GOOD creates FG stock and an FG LOT. REJECT is recorded but never increases usable stock.",columns:["PRD number","GOOD","REJECT","FG LOT"]},opname:{icon:ClipboardList,title:"Physical stock reconciliation",body:"System quantity is frozen, actual is counted, and the GAP posts through a referenced ADJ transaction.",columns:["STO number","System","Actual","GAP"]},reports:{icon:BarChart3,title:"Operational reporting",body:"Filter transactions by date, item, LOT, WO, user, type, and status before export.",columns:["Stock movement","Consumption","GOOD vs REJECT","Variance"]},audit:{icon:FileClock,title:"Append-oriented audit history",body:"Operational users cannot erase WHO, WHAT, WHEN, or REFERENCE history.",columns:["Actor","Action","Reference","Timestamp"]}};
-function GenericView({view}:{view:View}){const g=generic[view];if(!g)return null;const Icon=g.icon;return <article className="panel empty-module"><div className="module-icon"><Icon/></div><span className="eyebrow">FUNCTIONAL STRUCTURE</span><h2>{g.title}</h2><p>{g.body}</p><div className="module-cols">{g.columns.map(c=><span key={c}><CheckCircle2/>{c}</span>)}</div><div className="implementation-state"><i/>Workflow shell ready · transaction service implementation follows by milestone</div></article>}
-function SettingsView(){return <section className="settings-grid"><article className="panel"><div className="setting-title"><ShieldCheck/><span><h2>Authority separation</h2><p>Manager is operational authority. Admin owns system configuration.</p></span></div><div className="roles">{["PRODUCTION","WAREHOUSE","SUPERVISOR","MANAGER","ADMIN"].map(r=><span key={r}>{r}<b>{r==="ADMIN"?"System":"Operational"}</b></span>)}</div></article><article className="panel"><div className="setting-title"><Database/><span><h2>Database setup</h2><p>Credentials remain server-side.</p></span></div><dl><dt>Application mode</dt><dd><Tag>DEMO</Tag></dd><dt>Demo database</dt><dd>Configured</dd><dt>Production database</dt><dd>Not initialized</dd><dt>Migration status</dt><dd>Schema ready</dd></dl></article><article className="panel"><div className="setting-title"><Users/><span><h2>Users & roles</h2><p>Five isolated demo identities.</p></span></div><button className="secondary"><Plus/>Create production user</button></article><article className="panel danger"><div className="setting-title"><RefreshCcw/><span><h2>Reset demo data</h2><p>Only the demo database can be reset.</p></span></div><button>Reset demo database</button></article></section>}
-function Tag({children}:{children:React.ReactNode}){return <span className="tag">{children}</span>}
+function Dashboard({
+  session,
+  items,
+  go,
+}: {
+  session: Session;
+  items: Item[];
+  go: (v: View) => void;
+}) {
+  const low = items.filter((i) => i.stock < i.minimumStock);
+  const cards =
+    session.role === "PRODUCTION"
+      ? [
+          ["Production today", "476 PCS", "96.4% good"],
+          ["Released orders", "03", "2 in production"],
+          ["GOOD quantity", "459 PCS", "Today"],
+          ["REJECT quantity", "17 PCS", "3.6% reject"],
+        ]
+      : session.role === "WAREHOUSE"
+        ? [
+            ["Raw Material", "1,620 KG", "38 active SKUs"],
+            ["Pending requests", "04", "2 partial issues"],
+            ["Low stock", String(low.length), "Needs attention"],
+            ["Issues today", "648 PCS", "4 transactions"],
+          ]
+        : [
+            ["Raw Material", "Rp 428.6M", "38 active SKUs"],
+            ["WIP stock", "1,284 PCS", "6 active LOTs"],
+            ["Finished Goods", "2,436 PCS", "12 ready LOTs"],
+            ["Production today", "476 PCS", "96.4% good"],
+          ];
+  return (
+    <>
+      <section className="kpis">
+        {cards.map((c, i) => (
+          <article className={i === 3 ? "accent" : ""} key={c[0]}>
+            <span>
+              {c[0]}
+              <i>
+                {i === 0 ? (
+                  <Boxes />
+                ) : i === 1 ? (
+                  <Factory />
+                ) : i === 2 ? (
+                  <TriangleAlert />
+                ) : (
+                  <BarChart3 />
+                )}
+              </i>
+            </span>
+            <b>{c[1]}</b>
+            <small>{c[2]}</small>
+          </article>
+        ))}
+      </section>
+      <section className="dash-grid">
+        <article className="panel production">
+          <PanelHead
+            title="Production pulse"
+            note="Target versus actual · today"
+          />
+          <div className="big-number">
+            <b>476</b>
+            <span>/ 700 PCS target</span>
+            <em>68%</em>
+          </div>
+          <Progress value={68} />
+          <div className="stats">
+            <span>
+              GOOD RATE<b>96.4%</b>
+            </span>
+            <span>
+              REJECT RATE<b>3.6%</b>
+            </span>
+            <span>
+              OPEN ORDERS<b>03</b>
+            </span>
+          </div>
+        </article>
+        <article className="panel attention">
+          <PanelHead
+            title="Needs attention"
+            note={`${low.length} stock risks`}
+          />
+          {low.map((i) => (
+            <button key={i.id} onClick={() => go("inventory")}>
+              <TriangleAlert />
+              <span>
+                <b>{i.sku}</b>
+                <small>
+                  {i.minimumStock - i.stock} {i.uom} below minimum
+                </small>
+              </span>
+              <em>{i.stock / i.minimumStock < 0.85 ? "Critical" : "Low"}</em>
+            </button>
+          ))}
+        </article>
+      </section>
+      <article className="panel">
+        <PanelHead
+          title="Recent stock transactions"
+          note="Every movement is ledger-backed"
+        />
+        <TransactionTable />
+      </article>
+    </>
+  );
+}
+function PanelHead({ title, note }: { title: string; note: string }) {
+  return (
+    <div className="panel-head">
+      <div>
+        <h2>{title}</h2>
+        <p>{note}</p>
+      </div>
+      <button>
+        View all <ChevronRight />
+      </button>
+    </div>
+  );
+}
+function Progress({ value }: { value: number }) {
+  return (
+    <div className="progress">
+      <i style={{ width: `${value}%` }} />
+    </div>
+  );
+}
+function TransactionTable() {
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Transaction</th>
+            <th>Type</th>
+            <th>Item / LOT</th>
+            <th>Quantity</th>
+            <th>Reference</th>
+            <th>User</th>
+          </tr>
+        </thead>
+        <tbody>
+          {transactions.map((t) => (
+            <tr key={t.no}>
+              <td>
+                <b className="mono">{t.no}</b>
+              </td>
+              <td>
+                <Tag>{t.type}</Tag>
+              </td>
+              <td>
+                <b>{t.item}</b>
+                <small>{t.lot}</small>
+              </td>
+              <td>
+                <b className={t.tone}>{t.qty}</b>
+              </td>
+              <td className="mono">{t.ref}</td>
+              <td>{t.user}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+function Items({
+  items,
+  onEdit,
+  canEdit,
+}: {
+  items: Item[];
+  query: string;
+  onEdit: (i: Item) => void;
+  canEdit: boolean;
+}) {
+  const [q, setQ] = useState("");
+  const list = useMemo(
+    () =>
+      items.filter((i) =>
+        `${i.sku} ${i.name} ${i.category}`
+          .toLowerCase()
+          .includes(q.toLowerCase()),
+      ),
+    [items, q],
+  );
+  return (
+    <article className="panel">
+      <div className="toolbar">
+        <div className="table-search">
+          <Search />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search SKU, item, category…"
+          />
+        </div>
+        <button className="secondary">Download template</button>
+        <button className="secondary">Import CSV</button>
+      </div>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>SKU</th>
+              <th>Item</th>
+              <th>Type</th>
+              <th>Current Stock</th>
+              <th>Minimum</th>
+              <th>Status</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {list.map((i) => (
+              <tr key={i.id}>
+                <td>
+                  <b className="mono teal">{i.sku}</b>
+                </td>
+                <td>
+                  <b>{i.name}</b>
+                  <small>{i.category}</small>
+                </td>
+                <td>
+                  <Tag>{i.type}</Tag>
+                </td>
+                <td>
+                  <b>
+                    {i.stock.toLocaleString()} {i.uom}
+                  </b>
+                  <small>{i.lots} LOTs</small>
+                </td>
+                <td>
+                  {i.minimumStock.toLocaleString()} {i.uom}
+                </td>
+                <td>
+                  <span
+                    className={
+                      i.stock < i.minimumStock ? "status low" : "status healthy"
+                    }
+                  >
+                    {i.stock < i.minimumStock ? "Low stock" : "Healthy"}
+                  </span>
+                </td>
+                <td>
+                  {canEdit && (
+                    <button className="text-button" onClick={() => onEdit(i)}>
+                      Edit
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <footer className="table-footer">
+        {list.length} of {items.length} items
+      </footer>
+    </article>
+  );
+}
+function Orders() {
+  return (
+    <section className="order-grid">
+      {orders.map((o) => (
+        <article className="order" key={o.no}>
+          <div>
+            <Tag>{o.status}</Tag>
+            <small>{o.due}</small>
+          </div>
+          <b className="mono teal">{o.no}</b>
+          <h2>{o.product}</h2>
+          <section>
+            <span>
+              Target<b>{o.target} PCS</b>
+            </span>
+            <span>
+              Actual<b>{o.actual} PCS</b>
+            </span>
+            <span>
+              Materials<b>{o.materials}</b>
+            </span>
+          </section>
+          <Progress value={(o.actual / o.target) * 100} />
+          <button>
+            Open production order <ChevronRight />
+          </button>
+        </article>
+      ))}
+    </section>
+  );
+}
+function Traceability() {
+  return (
+    <section className="trace">
+      <article className="panel trace-search">
+        <span className="eyebrow">GENEALOGY SEARCH</span>
+        <h2>Follow any LOT end to end</h2>
+        <div>
+          <Activity />
+          <input defaultValue="FG-20260911-0003" />
+          <button>Trace LOT</button>
+        </div>
+        <p>Search a raw-material or finished-goods LOT.</p>
+      </article>
+      <article className="panel">
+        <PanelHead
+          title="Backward trace result"
+          note="FG-20260911-0003 · 196 PCS"
+        />
+        <div className="flow">
+          <Node
+            type="RAW MATERIAL LOT"
+            no="RM-260907-A"
+            detail="ABS Resin · 48 KG"
+          />
+          <ChevronRight />
+          <Node
+            type="MATERIAL ISSUE"
+            no="MI-20260911-0004"
+            detail="11 Sep · 08:42"
+          />
+          <ChevronRight />
+          <Node
+            type="PRODUCTION ORDER"
+            no="WO-20260911-0001"
+            detail="Rear Combination Lamp"
+          />
+          <ChevronRight />
+          <Node
+            type="FINISHED GOODS LOT"
+            no="FG-20260911-0003"
+            detail="196 PCS · Released"
+            active
+          />
+        </div>
+      </article>
+    </section>
+  );
+}
+function Node({
+  type,
+  no,
+  detail,
+  active,
+}: {
+  type: string;
+  no: string;
+  detail: string;
+  active?: boolean;
+}) {
+  return (
+    <div className={active ? "node active" : "node"}>
+      <span>{type}</span>
+      <b className="mono">{no}</b>
+      <small>{detail}</small>
+    </div>
+  );
+}
+const generic: Record<
+  string,
+  { icon: typeof Boxes; title: string; body: string; columns: string[] }
+> = {
+  inventory: {
+    icon: Database,
+    title: "Inventory control",
+    body: "Stock is derived from ledger entries by item, LOT, and location. Direct quantity editing is unavailable.",
+    columns: [
+      "Current stock",
+      "Available stock",
+      "Stock by LOT",
+      "Movement history",
+    ],
+  },
+  boms: {
+    icon: ClipboardList,
+    title: "BOM administration",
+    body: "Active BOM versions calculate material requirements when a Production Order is released.",
+    columns: ["Parent item", "Version", "Standard output", "Components"],
+  },
+  requests: {
+    icon: ClipboardCheck,
+    title: "Material request workflow",
+    body: "Required, requested, issued, and remaining quantities stay linked to a released WO.",
+    columns: ["MR number", "WO reference", "Requested", "Remaining"],
+  },
+  issues: {
+    icon: ArrowDownUp,
+    title: "Warehouse material issue",
+    body: "Posting selects an RM LOT, prevents negative stock, and creates an immutable OUT entry.",
+    columns: ["MI number", "RM LOT", "Issue quantity", "Posted by"],
+  },
+  results: {
+    icon: PackageCheck,
+    title: "Production result posting",
+    body: "GOOD creates FG stock and an FG LOT. REJECT is recorded but never increases usable stock.",
+    columns: ["PRD number", "GOOD", "REJECT", "FG LOT"],
+  },
+  opname: {
+    icon: ClipboardList,
+    title: "Physical stock reconciliation",
+    body: "System quantity is frozen, actual is counted, and the GAP posts through a referenced ADJ transaction.",
+    columns: ["STO number", "System", "Actual", "GAP"],
+  },
+  reports: {
+    icon: BarChart3,
+    title: "Operational reporting",
+    body: "Filter transactions by date, item, LOT, WO, user, type, and status before export.",
+    columns: ["Stock movement", "Consumption", "GOOD vs REJECT", "Variance"],
+  },
+  audit: {
+    icon: FileClock,
+    title: "Append-oriented audit history",
+    body: "Operational users cannot erase WHO, WHAT, WHEN, or REFERENCE history.",
+    columns: ["Actor", "Action", "Reference", "Timestamp"],
+  },
+};
+function GenericView({ view }: { view: View }) {
+  const g = generic[view];
+  if (!g) return null;
+  const Icon = g.icon;
+  return (
+    <article className="panel empty-module">
+      <div className="module-icon">
+        <Icon />
+      </div>
+      <span className="eyebrow">FUNCTIONAL STRUCTURE</span>
+      <h2>{g.title}</h2>
+      <p>{g.body}</p>
+      <div className="module-cols">
+        {g.columns.map((c) => (
+          <span key={c}>
+            <CheckCircle2 />
+            {c}
+          </span>
+        ))}
+      </div>
+      <div className="implementation-state">
+        <i />
+        Workflow shell ready · transaction service implementation follows by
+        milestone
+      </div>
+    </article>
+  );
+}
+function SettingsView() {
+  return (
+    <section className="settings-grid">
+      <article className="panel">
+        <div className="setting-title">
+          <ShieldCheck />
+          <span>
+            <h2>Authority separation</h2>
+            <p>
+              Manager is operational authority. Admin owns system configuration.
+            </p>
+          </span>
+        </div>
+        <div className="roles">
+          {["PRODUCTION", "WAREHOUSE", "SUPERVISOR", "MANAGER", "ADMIN"].map(
+            (r) => (
+              <span key={r}>
+                {r}
+                <b>{r === "ADMIN" ? "System" : "Operational"}</b>
+              </span>
+            ),
+          )}
+        </div>
+      </article>
+      <article className="panel">
+        <div className="setting-title">
+          <Database />
+          <span>
+            <h2>Database setup</h2>
+            <p>Credentials remain server-side.</p>
+          </span>
+        </div>
+        <dl>
+          <dt>Application mode</dt>
+          <dd>
+            <Tag>DEMO</Tag>
+          </dd>
+          <dt>Demo database</dt>
+          <dd>Configured</dd>
+          <dt>Production database</dt>
+          <dd>Configured by server .env</dd>
+          <dt>Migration status</dt>
+          <dd>Schema ready</dd>
+        </dl>
+      </article>
+      <article className="panel">
+        <div className="setting-title">
+          <Users />
+          <span>
+            <h2>Users & roles</h2>
+            <p>Five isolated demo identities.</p>
+          </span>
+        </div>
+        <button
+          className="secondary"
+          onClick={() =>
+            alert(
+              "Production user management is available through the authenticated Admin API.",
+            )
+          }
+        >
+          <Plus />
+          Create production user
+        </button>
+      </article>
+      <article className="panel danger">
+        <div className="setting-title">
+          <RefreshCcw />
+          <span>
+            <h2>Reset demo data</h2>
+            <p>Only the demo database can be reset.</p>
+          </span>
+        </div>
+        <button
+          onClick={() => {
+            if (confirm("Reset seluruh data demo di browser ini?")) {
+              localStorage.removeItem("msc-demo-v1");
+              location.reload();
+            }
+          }}
+        >
+          Reset demo database
+        </button>
+      </article>
+    </section>
+  );
+}
+function Tag({ children }: { children: React.ReactNode }) {
+  return <span className="tag">{children}</span>;
+}
