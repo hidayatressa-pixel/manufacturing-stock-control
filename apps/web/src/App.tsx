@@ -240,7 +240,7 @@ export default function App() {
           ) : view === "traceability" ? (
             <Traceability />
           ) : view === "orders" ? (
-            <Orders />
+            <Orders role={session.role} go={go} onNotify={setToast} />
           ) : view === "settings" ? (
             <SettingsView />
           ) : view === "reports" ? (
@@ -545,9 +545,14 @@ function Items({
     </article>
   );
 }
-function Orders() {
+function Orders({role,go,onNotify}:{role:Session["role"];go:(view:View)=>void;onNotify:(text:string)=>void}) {
+  const [selected,setSelected]=useState<(typeof orders)[number]|null>(null);
+  const requirements=(order:(typeof orders)[number])=>order.product.includes("Housing")
+    ? [{sku:"RM-ABS-001",name:"ABS Resin Black",required:120,issued:48,uom:"KG",lot:"RM-260907-A"}]
+    : [{sku:"RM-ABS-001",name:"ABS Resin Black",required:order.target*.24,issued:order.actual*.24,uom:"KG",lot:"RM-260907-A"},{sku:"RM-LED-014",name:"LED Module 12V",required:order.target,issued:order.actual,uom:"PCS",lot:"LED-260911-B"},{sku:"RM-LENS-008",name:"Clear Lens Type B",required:order.target,issued:order.actual,uom:"PCS",lot:"LNS-260828-A"}];
+  const openModule=(view:View,message:string)=>{setSelected(null);go(view);onNotify(message)};
   return (
-    <section className="order-grid">
+    <><section className="order-grid">
       {orders.map((o) => (
         <article className="order" key={o.no}>
           <div>
@@ -568,12 +573,12 @@ function Orders() {
             </span>
           </section>
           <Progress value={(o.actual / o.target) * 100} />
-          <button>
+          <button onClick={()=>setSelected(o)}>
             Open production order <ChevronRight />
           </button>
         </article>
       ))}
-    </section>
+    </section>{selected&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setSelected(null)}}><article className="wo-dialog" role="dialog" aria-modal="true" aria-labelledby="wo-title"><div className="wo-head"><div><span className="eyebrow">PRODUCTION ORDER DETAIL</span><h2 id="wo-title" className="mono">{selected.no}</h2><p>{selected.product} · {selected.due}</p></div><button aria-label="Close production order" onClick={()=>setSelected(null)}><X/></button></div><section className="wo-summary"><div><small>STATUS</small><Tag>{selected.status}</Tag></div><div><small>TARGET</small><b>{selected.target} PCS</b></div><div><small>ACTUAL</small><b>{selected.actual} PCS</b></div><div><small>REMAINING</small><b>{selected.target-selected.actual} PCS</b></div></section><div className="wo-progress"><span>Production achievement <b>{Math.round(selected.actual/selected.target*100)}%</b></span><Progress value={selected.actual/selected.target*100}/></div><section className="wo-section"><div className="wo-section-title"><div><h3>Material requirements</h3><p>BOM requirement compared with posted material issues.</p></div><span className={`status ${selected.materials==="Complete"?"healthy":"low"}`}>{selected.materials}</span></div><div className="table-wrap"><table className="wo-table"><thead><tr><th>ITEM</th><th>REQUIRED</th><th>ISSUED</th><th>REMAINING</th><th>LOT</th></tr></thead><tbody>{requirements(selected).map(r=><tr key={r.sku}><td><b className="mono teal">{r.sku}</b><small>{r.name}</small></td><td>{r.required.toLocaleString()} {r.uom}</td><td>{r.issued.toLocaleString()} {r.uom}</td><td><b className={r.required-r.issued>0?"out":"in"}>{(r.required-r.issued).toLocaleString()} {r.uom}</b></td><td className="mono">{r.issued?r.lot:"—"}</td></tr>)}</tbody></table></div></section><section className="wo-section result-strip"><div><small>LATEST RESULT</small><b>{selected.actual?`PRD-${selected.no.slice(3)} · ${selected.actual} GOOD`:`No production result posted`}</b></div><div><small>MATERIAL STATUS</small><b>{selected.materials}</b></div></section><footer className="wo-actions"><button className="secondary" onClick={()=>setSelected(null)}>Close</button>{["PRODUCTION","SUPERVISOR","ADMIN"].includes(role)&&selected.materials!=="Complete"&&<button className="secondary" onClick={()=>openModule("requests",`Material request untuk ${selected.no}`)}><ClipboardCheck/>Request material</button>}{["WAREHOUSE","ADMIN"].includes(role)&&selected.materials!=="Complete"&&<button className="secondary" onClick={()=>openModule("issues",`Material issue untuk ${selected.no}`)}><ArrowDownUp/>Issue material</button>}{["PRODUCTION","ADMIN"].includes(role)&&selected.actual<selected.target&&<button className="primary" onClick={()=>openModule("results",`Production result untuk ${selected.no}`)}><PackageCheck/>Record result</button>}</footer></article></div>}</>
   );
 }
 function Traceability() {
