@@ -1,0 +1,300 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role { PRODUCTION WAREHOUSE SUPERVISOR MANAGER ADMIN }
+enum ItemType { RAW_MATERIAL WIP FINISHED_GOODS }
+enum DocumentStatus { DRAFT POSTED REVERSED CANCELLED }
+enum WorkOrderStatus { DRAFT RELEASED IN_PRODUCTION COMPLETED CANCELLED }
+enum MaterialRequestStatus { DRAFT REQUESTED PARTIALLY_ISSUED ISSUED CLOSED CANCELLED }
+enum Direction { IN OUT }
+
+model User {
+  id           String   @id @default(cuid())
+  employeeId   String   @unique @map("employee_id") @db.VarChar(40)
+  name         String   @db.VarChar(120)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  role         Role
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  ledgerEntries StockLedger[]
+  auditLogs     ActivityLog[]
+  @@map("users")
+}
+
+model Uom {
+  id               String @id @default(cuid())
+  code             String @unique @db.VarChar(16)
+  name             String @db.VarChar(60)
+  decimalPrecision Int    @default(0) @map("decimal_precision")
+  active           Boolean @default(true)
+  items            Item[]
+  bomLines         BomLine[]
+  @@map("uoms")
+}
+
+model Category {
+  id     String @id @default(cuid())
+  code   String @unique @db.VarChar(30)
+  name   String @db.VarChar(80)
+  active Boolean @default(true)
+  items  Item[]
+  @@map("categories")
+}
+
+model Item {
+  id            String   @id @default(cuid())
+  sku           String   @unique @db.VarChar(40)
+  name          String   @db.VarChar(120)
+  description   String?  @db.VarChar(500)
+  type          ItemType
+  categoryId    String?  @map("category_id")
+  uomId         String   @map("uom_id")
+  minimumStock  Decimal  @default(0) @map("minimum_stock") @db.Decimal(18, 4)
+  barcode       String?  @unique @db.VarChar(80)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  category      Category? @relation(fields: [categoryId], references: [id])
+  uom           Uom       @relation(fields: [uomId], references: [id])
+  lots          Lot[]
+  balances      StockBalance[]
+  ledgerEntries StockLedger[]
+  bomParents    BomHeader[]
+  bomComponents BomLine[]
+  productionProducts ProductionOrder[] @relation("ProductionProducts")
+  requirements  ProductionRequirement[]
+  @@index([type, active])
+  @@map("items")
+}
+
+model Location {
+  id      String @id @default(cuid())
+  code    String @unique @db.VarChar(30)
+  name    String @db.VarChar(100)
+  type    String @db.VarChar(30)
+  active  Boolean @default(true)
+  balances StockBalance[]
+  ledgerEntries StockLedger[]
+  @@map("locations")
+}
+
+model Lot {
+  id             String    @id @default(cuid())
+  lotNo          String    @map("lot_no") @db.VarChar(80)
+  itemId         String    @map("item_id")
+  sourceType     String    @map("source_type") @db.VarChar(30)
+  sourceId       String?   @map("source_id")
+  receivedAt     DateTime? @map("received_at")
+  manufacturedAt DateTime? @map("manufactured_at")
+  expiresAt      DateTime? @map("expires_at")
+  status         String    @default("AVAILABLE") @db.VarChar(24)
+  item           Item      @relation(fields: [itemId], references: [id])
+  balances       StockBalance[]
+  ledgerEntries  StockLedger[]
+  @@unique([itemId, lotNo])
+  @@index([lotNo])
+  @@map("lots")
+}
+
+model StockBalance {
+  id          String  @id @default(cuid())
+  itemId      String  @map("item_id")
+  lotId       String  @map("lot_id")
+  locationId  String  @map("location_id")
+  onHandQty   Decimal @default(0) @map("on_hand_qty") @db.Decimal(18, 4)
+  reservedQty Decimal @default(0) @map("reserved_qty") @db.Decimal(18, 4)
+  version     Int     @default(0)
+  item        Item     @relation(fields: [itemId], references: [id])
+  lot         Lot      @relation(fields: [lotId], references: [id])
+  location    Location @relation(fields: [locationId], references: [id])
+  @@unique([itemId, lotId, locationId])
+  @@map("stock_balances")
+}
+
+model StockLedger {
+  id              String    @id @default(cuid())
+  transactionNo   String    @map("transaction_no") @db.VarChar(40)
+  lineNo          Int       @map("line_no")
+  transactionType String    @map("transaction_type") @db.VarChar(30)
+  itemId          String    @map("item_id")
+  lotId           String    @map("lot_id")
+  locationId      String    @map("location_id")
+  direction       Direction
+  quantity        Decimal   @db.Decimal(18, 4)
+  referenceType   String    @map("reference_type") @db.VarChar(30)
+  referenceId     String    @map("reference_id")
+  actorId         String    @map("actor_id")
+  reversalOfId    String?   @map("reversal_of_id")
+  idempotencyKey  String    @unique @map("idempotency_key") @db.VarChar(100)
+  notes           String?   @db.VarChar(500)
+  occurredAt      DateTime  @default(now()) @map("occurred_at")
+  item            Item      @relation(fields: [itemId], references: [id])
+  lot             Lot       @relation(fields: [lotId], references: [id])
+  location        Location  @relation(fields: [locationId], references: [id])
+  actor           User      @relation(fields: [actorId], references: [id])
+  @@unique([transactionNo, lineNo])
+  @@index([itemId, occurredAt])
+  @@index([lotId, occurredAt])
+  @@index([referenceType, referenceId])
+  @@map("stock_ledger")
+}
+
+model BomHeader {
+  id           String  @id @default(cuid())
+  parentItemId String  @map("parent_item_id")
+  version      String  @db.VarChar(20)
+  baseQuantity Decimal @default(1) @map("base_quantity") @db.Decimal(18, 4)
+  status       String  @default("ACTIVE") @db.VarChar(20)
+  parentItem   Item    @relation(fields: [parentItemId], references: [id])
+  lines        BomLine[]
+  productionOrders ProductionOrder[]
+  @@unique([parentItemId, version])
+  @@map("bom_headers")
+}
+
+model BomLine {
+  id              String  @id @default(cuid())
+  bomId           String  @map("bom_id")
+  componentItemId String  @map("component_item_id")
+  quantity        Decimal @db.Decimal(18, 4)
+  uomId           String  @map("uom_id")
+  bom             BomHeader @relation(fields: [bomId], references: [id])
+  component       Item      @relation(fields: [componentItemId], references: [id])
+  uom             Uom       @relation(fields: [uomId], references: [id])
+  @@unique([bomId, componentItemId])
+  @@map("bom_lines")
+}
+
+model ProductionOrder {
+  id             String          @id @default(cuid())
+  woNo           String          @unique @map("wo_no") @db.VarChar(40)
+  productId      String          @map("product_id")
+  bomId          String          @map("bom_id")
+  targetQty      Decimal         @map("target_qty") @db.Decimal(18, 4)
+  productionDate DateTime        @map("production_date")
+  dueDate        DateTime?       @map("due_date")
+  status         WorkOrderStatus @default(DRAFT)
+  notes          String?         @db.VarChar(500)
+  product        Item            @relation("ProductionProducts", fields: [productId], references: [id])
+  bom            BomHeader       @relation(fields: [bomId], references: [id])
+  requirements   ProductionRequirement[]
+  requests       MaterialRequest[]
+  results        ProductionResult[]
+  @@index([status, productionDate])
+  @@map("production_orders")
+}
+
+model ProductionRequirement {
+  id           String  @id @default(cuid())
+  woId         String  @map("wo_id")
+  itemId       String  @map("item_id")
+  requiredQty  Decimal @map("required_qty") @db.Decimal(18, 4)
+  requestedQty Decimal @default(0) @map("requested_qty") @db.Decimal(18, 4)
+  issuedQty    Decimal @default(0) @map("issued_qty") @db.Decimal(18, 4)
+  productionOrder ProductionOrder @relation(fields: [woId], references: [id])
+  item            Item            @relation(fields: [itemId], references: [id])
+  requestLines    MaterialRequestLine[]
+  @@unique([woId, itemId])
+  @@map("production_requirements")
+}
+
+model MaterialRequest {
+  id          String                @id @default(cuid())
+  mrNo        String                @unique @map("mr_no") @db.VarChar(40)
+  woId        String                @map("wo_id")
+  status      MaterialRequestStatus @default(DRAFT)
+  requesterId String                @map("requester_id")
+  requestedAt DateTime?             @map("requested_at")
+  productionOrder ProductionOrder @relation(fields: [woId], references: [id])
+  lines       MaterialRequestLine[]
+  issues      MaterialIssue[]
+  @@index([status])
+  @@map("material_requests")
+}
+
+model MaterialRequestLine {
+  id            String  @id @default(cuid())
+  mrId          String  @map("mr_id")
+  requirementId String  @map("requirement_id")
+  itemId        String  @map("item_id")
+  requestedQty  Decimal @map("requested_qty") @db.Decimal(18, 4)
+  issuedQty     Decimal @default(0) @map("issued_qty") @db.Decimal(18, 4)
+  request       MaterialRequest      @relation(fields: [mrId], references: [id])
+  requirement   ProductionRequirement @relation(fields: [requirementId], references: [id])
+  issueLines    MaterialIssueLine[]
+  @@map("material_request_lines")
+}
+
+model MaterialIssue {
+  id              String         @id @default(cuid())
+  miNo            String         @unique @map("mi_no") @db.VarChar(40)
+  mrId            String         @map("mr_id")
+  woId            String         @map("wo_id")
+  status          DocumentStatus @default(DRAFT)
+  warehouseUserId String         @map("warehouse_user_id")
+  postedAt        DateTime?      @map("posted_at")
+  request         MaterialRequest @relation(fields: [mrId], references: [id])
+  lines           MaterialIssueLine[]
+  @@map("material_issues")
+}
+
+model MaterialIssueLine {
+  id         String  @id @default(cuid())
+  miId       String  @map("mi_id")
+  mrLineId   String  @map("mr_line_id")
+  itemId     String  @map("item_id")
+  lotId      String  @map("lot_id")
+  locationId String  @map("location_id")
+  issuedQty  Decimal @map("issued_qty") @db.Decimal(18, 4)
+  issue       MaterialIssue       @relation(fields: [miId], references: [id])
+  requestLine MaterialRequestLine @relation(fields: [mrLineId], references: [id])
+  @@map("material_issue_lines")
+}
+
+model ProductionResult {
+  id          String         @id @default(cuid())
+  prdNo       String         @unique @map("prd_no") @db.VarChar(40)
+  woId        String         @map("wo_id")
+  reportedQty Decimal        @map("reported_qty") @db.Decimal(18, 4)
+  goodQty     Decimal        @map("good_qty") @db.Decimal(18, 4)
+  rejectQty   Decimal        @map("reject_qty") @db.Decimal(18, 4)
+  fgLotId     String?        @map("fg_lot_id")
+  status      DocumentStatus @default(DRAFT)
+  startedAt   DateTime?      @map("started_at")
+  finishedAt  DateTime?      @map("finished_at")
+  postedAt    DateTime?      @map("posted_at")
+  productionOrder ProductionOrder @relation(fields: [woId], references: [id])
+  rejects     ProductionReject[]
+  @@map("production_results")
+}
+
+model ProductionReject {
+  id         String  @id @default(cuid())
+  resultId   String  @map("result_id")
+  reasonCode String  @map("reason_code") @db.VarChar(30)
+  quantity   Decimal @db.Decimal(18, 4)
+  notes      String? @db.VarChar(255)
+  result     ProductionResult @relation(fields: [resultId], references: [id])
+  @@map("production_rejects")
+}
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  actorId     String?  @map("actor_id")
+  action      String   @db.VarChar(60)
+  entityType  String   @map("entity_type") @db.VarChar(50)
+  entityId    String?  @map("entity_id")
+  referenceNo String?  @map("reference_no") @db.VarChar(50)
+  metadata    Json?
+  occurredAt  DateTime @default(now()) @map("occurred_at")
+  actor       User?    @relation(fields: [actorId], references: [id])
+  @@index([occurredAt])
+  @@map("activity_logs")
+}
