@@ -18,8 +18,26 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - run: npm install
-      - run: npm run build
+      - name: Install frontend
+        run: npm install
+      - name: Build frontend
+        run: npm run build
+      - name: Install API
+        working-directory: server
+        run: npm install
+      - name: Validate Prisma schema
+        working-directory: server
+        env:
+          DATABASE_URL: mysql://msc:msc@localhost:3306/msc
+        run: npx prisma validate
+      - name: Generate Prisma client
+        working-directory: server
+        env:
+          DATABASE_URL: mysql://msc:msc@localhost:3306/msc
+        run: npx prisma generate
+      - name: Build API
+        working-directory: server
+        run: npm run build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
