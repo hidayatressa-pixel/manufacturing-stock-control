@@ -1,15 +1,13 @@
 generator client { provider = "prisma-client-js" }
 datasource db { provider = "mysql" url = env("DATABASE_URL") }
-
 enum Role { PPC WAREHOUSE PRODUCTION DELIVERY SUPERVISOR MANAGER ADMIN }
 enum ItemType { RM FG }
 enum POStatus { DRAFT RELEASED MATERIAL_PREPARED READY_FOR_PRODUCTION COMPLETED DELIVERED CANCELLED }
 enum TransferKind { MATERIAL FG }
 enum TransferStatus { WAITING_RECEIVE RECEIVED REVERSED }
 enum Direction { IN OUT }
-
 model User { id Int @id @default(autoincrement()) employeeId String @unique passwordHash String role Role active Boolean @default(true) createdAt DateTime @default(now()) audits AuditLog[] }
-model Item { id Int @id @default(autoincrement()) code String @unique name String type ItemType uom String active Boolean @default(true) bomProducts Bom[] @relation("BomProduct") bomComponents BomLine[] stock StockBalance[] ledger StockLedger[] }
+model Item { id Int @id @default(autoincrement()) code String @unique name String type ItemType uom String active Boolean @default(true) bomProducts Bom[] @relation("BomProduct") bomComponents BomLine[] groupProducts ProductionGroupProduct[] orders ProductionOrder[] requirements ProductionRequirement[] lots Lot[] stock StockBalance[] ledger StockLedger[] transferLines TransferLine[] }
 model ProductionGroup { id Int @id @default(autoincrement()) code String @unique name String active Boolean @default(true) products ProductionGroupProduct[] orders ProductionOrder[] }
 model ProductionGroupProduct { groupId Int productId Int group ProductionGroup @relation(fields:[groupId],references:[id]) product Item @relation(fields:[productId],references:[id]) @@id([groupId,productId]) }
 model Bom { id Int @id @default(autoincrement()) code String @unique productId Int version String active Boolean @default(true) product Item @relation("BomProduct",fields:[productId],references:[id]) lines BomLine[] createdAt DateTime @default(now()) @@unique([productId,version]) }
