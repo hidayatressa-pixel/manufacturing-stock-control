@@ -7,229 +7,276 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role { PPC WAREHOUSE PRODUCTION DELIVERY SUPERVISOR MANAGER ADMIN }
-enum ItemType { RM FG }
-enum POStatus { DRAFT RELEASED MATERIAL_PREPARED READY_FOR_PRODUCTION COMPLETED DELIVERED CANCELLED }
-enum MRStatus { RELEASED ISSUED }
-enum TransferKind { MATERIAL FG }
-enum TransferStatus { WAITING_RECEIVE RECEIVED REVERSED }
-enum Direction { IN OUT }
+enum Role {
+  PPC
+  WAREHOUSE
+  PRODUCTION
+  DELIVERY
+  SUPERVISOR
+  MANAGER
+  ADMIN
+}
+
+enum ItemType {
+  RM
+  FG
+}
+
+enum POStatus {
+  DRAFT
+  RELEASED
+  MATERIAL_PREPARED
+  READY_FOR_PRODUCTION
+  COMPLETED
+  DELIVERED
+  CANCELLED
+}
+
+enum MRStatus {
+  RELEASED
+  ISSUED
+}
+
+enum TransferKind {
+  MATERIAL
+  FG
+}
+
+enum TransferStatus {
+  WAITING_RECEIVE
+  RECEIVED
+  REVERSED
+}
+
+enum Direction {
+  IN
+  OUT
+}
 
 model User {
-  id Int @id @default(autoincrement())
-  employeeId String @unique
+  id           Int        @id @default(autoincrement())
+  employeeId   String     @unique
   passwordHash String
-  role Role
-  active Boolean @default(true)
-  createdAt DateTime @default(now())
-  audits AuditLog[]
+  role         Role
+  active       Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  audits       AuditLog[]
 }
 
 model Item {
-  id Int @id @default(autoincrement())
-  code String @unique
-  name String
-  type ItemType
-  uom String
-  active Boolean @default(true)
-  bomProducts Bom[] @relation("BomProduct")
+  id            Int                      @id @default(autoincrement())
+  code          String                   @unique
+  name          String
+  type          ItemType
+  uom           String
+  active        Boolean                  @default(true)
+  bomProducts   Bom[]                    @relation("BomProduct")
   bomComponents BomLine[]
   groupProducts ProductionGroupProduct[]
-  orders ProductionOrder[]
-  requirements ProductionRequirement[]
-  mrLines MaterialRequestLine[]
-  lots Lot[]
-  stock StockBalance[]
-  ledger StockLedger[]
+  orders        ProductionOrder[]
+  requirements  ProductionRequirement[]
+  mrLines       MaterialRequestLine[]
+  lots          Lot[]
+  stock         StockBalance[]
+  ledger        StockLedger[]
   transferLines TransferLine[]
 }
 
 model ProductionGroup {
-  id Int @id @default(autoincrement())
-  code String @unique
-  name String
-  active Boolean @default(true)
+  id       Int                      @id @default(autoincrement())
+  code     String                   @unique
+  name     String
+  active   Boolean                  @default(true)
   products ProductionGroupProduct[]
-  orders ProductionOrder[]
+  orders   ProductionOrder[]
 }
 
 model ProductionGroupProduct {
-  groupId Int
+  groupId   Int
   productId Int
-  group ProductionGroup @relation(fields: [groupId], references: [id])
-  product Item @relation(fields: [productId], references: [id])
+  group     ProductionGroup @relation(fields: [groupId], references: [id])
+  product   Item            @relation(fields: [productId], references: [id])
+
   @@id([groupId, productId])
 }
 
 model Bom {
-  id Int @id @default(autoincrement())
-  code String @unique
+  id        Int       @id @default(autoincrement())
+  code      String    @unique
   productId Int
-  version String
-  active Boolean @default(true)
-  product Item @relation("BomProduct", fields: [productId], references: [id])
-  lines BomLine[]
-  createdAt DateTime @default(now())
+  version   String
+  active    Boolean   @default(true)
+  product   Item      @relation("BomProduct", fields: [productId], references: [id])
+  lines     BomLine[]
+  createdAt DateTime  @default(now())
+
   @@unique([productId, version])
 }
 
 model BomLine {
-  id Int @id @default(autoincrement())
-  bomId Int
+  id     Int     @id @default(autoincrement())
+  bomId  Int
   itemId Int
-  qty Decimal @db.Decimal(18, 4)
-  bom Bom @relation(fields: [bomId], references: [id], onDelete: Cascade)
-  item Item @relation(fields: [itemId], references: [id])
+  qty    Decimal @db.Decimal(18, 4)
+  bom    Bom     @relation(fields: [bomId], references: [id], onDelete: Cascade)
+  item   Item    @relation(fields: [itemId], references: [id])
+
   @@unique([bomId, itemId])
 }
 
 model ProductionOrder {
-  id Int @id @default(autoincrement())
-  number String @unique
-  groupId Int
-  productId Int
-  target Decimal @db.Decimal(18, 4)
-  productionDate DateTime
-  productionLot String @unique
-  bomCode String
-  status POStatus @default(DRAFT)
-  group ProductionGroup @relation(fields: [groupId], references: [id])
-  product Item @relation(fields: [productId], references: [id])
-  requirements ProductionRequirement[]
+  id              Int                     @id @default(autoincrement())
+  number          String                  @unique
+  groupId         Int
+  productId       Int
+  target          Decimal                 @db.Decimal(18, 4)
+  productionDate  DateTime
+  productionLot   String                  @unique
+  bomCode         String
+  status          POStatus                @default(DRAFT)
+  group           ProductionGroup         @relation(fields: [groupId], references: [id])
+  product         Item                    @relation(fields: [productId], references: [id])
+  requirements    ProductionRequirement[]
   materialRequest MaterialRequest?
-  transfers Transfer[]
-  result ProductionResult?
-  createdAt DateTime @default(now())
+  transfers       Transfer[]
+  result          ProductionResult?
+  createdAt       DateTime                @default(now())
 }
 
 model ProductionRequirement {
-  id Int @id @default(autoincrement())
-  poId Int
-  itemId Int
-  qtyPer Decimal @db.Decimal(18, 4)
-  required Decimal @db.Decimal(18, 4)
-  po ProductionOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
-  item Item @relation(fields: [itemId], references: [id])
+  id       Int             @id @default(autoincrement())
+  poId     Int
+  itemId   Int
+  qtyPer   Decimal         @db.Decimal(18, 4)
+  required Decimal         @db.Decimal(18, 4)
+  po       ProductionOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+  item     Item            @relation(fields: [itemId], references: [id])
+
   @@unique([poId, itemId])
 }
 
 model MaterialRequest {
-  id Int @id @default(autoincrement())
-  number String @unique
-  poId Int @unique
-  status MRStatus @default(RELEASED)
-  po ProductionOrder @relation(fields: [poId], references: [id])
-  lines MaterialRequestLine[]
-  createdAt DateTime @default(now())
+  id        Int                   @id @default(autoincrement())
+  number    String                @unique
+  poId      Int                   @unique
+  status    MRStatus              @default(RELEASED)
+  po        ProductionOrder       @relation(fields: [poId], references: [id])
+  lines     MaterialRequestLine[]
+  createdAt DateTime              @default(now())
 }
 
 model MaterialRequestLine {
-  id Int @id @default(autoincrement())
-  requestId Int
-  itemId Int
-  required Decimal @db.Decimal(18, 4)
+  id          Int             @id @default(autoincrement())
+  requestId   Int
+  itemId      Int
+  required    Decimal         @db.Decimal(18, 4)
   selectedLot String?
-  request MaterialRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  item Item @relation(fields: [itemId], references: [id])
+  request     MaterialRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  item        Item            @relation(fields: [itemId], references: [id])
+
   @@unique([requestId, itemId])
 }
 
 model Lot {
-  id Int @id @default(autoincrement())
-  code String
+  id     Int            @id @default(autoincrement())
+  code   String
   itemId Int
-  item Item @relation(fields: [itemId], references: [id])
-  stock StockBalance[]
+  item   Item           @relation(fields: [itemId], references: [id])
+  stock  StockBalance[]
   ledger StockLedger[]
+
   @@unique([itemId, code])
 }
 
 model Location {
-  id Int @id @default(autoincrement())
-  code String @unique
-  name String
-  stock StockBalance[]
+  id     Int            @id @default(autoincrement())
+  code   String         @unique
+  name   String
+  stock  StockBalance[]
   ledger StockLedger[]
 }
 
 model StockBalance {
-  id Int @id @default(autoincrement())
-  itemId Int
-  lotId Int
+  id         Int      @id @default(autoincrement())
+  itemId     Int
+  lotId      Int
   locationId Int
-  qty Decimal @default(0) @db.Decimal(18, 4)
-  item Item @relation(fields: [itemId], references: [id])
-  lot Lot @relation(fields: [lotId], references: [id])
-  location Location @relation(fields: [locationId], references: [id])
+  qty        Decimal  @default(0) @db.Decimal(18, 4)
+  item       Item     @relation(fields: [itemId], references: [id])
+  lot        Lot      @relation(fields: [lotId], references: [id])
+  location   Location @relation(fields: [locationId], references: [id])
+
   @@unique([itemId, lotId, locationId])
 }
 
 model StockLedger {
-  id Int @id @default(autoincrement())
-  number String @unique
+  id            Int       @id @default(autoincrement())
+  number        String    @unique
   referenceType String
-  referenceNo String
-  itemId Int
-  lotId Int
-  locationId Int
-  direction Direction
-  qty Decimal @db.Decimal(18, 4)
-  actorId Int?
-  reason String?
-  createdAt DateTime @default(now())
-  item Item @relation(fields: [itemId], references: [id])
-  lot Lot @relation(fields: [lotId], references: [id])
-  location Location @relation(fields: [locationId], references: [id])
+  referenceNo   String
+  itemId        Int
+  lotId         Int
+  locationId    Int
+  direction     Direction
+  qty           Decimal   @db.Decimal(18, 4)
+  actorId       Int?
+  reason        String?
+  createdAt     DateTime  @default(now())
+  item          Item      @relation(fields: [itemId], references: [id])
+  lot           Lot       @relation(fields: [lotId], references: [id])
+  location      Location  @relation(fields: [locationId], references: [id])
+
   @@index([referenceType, referenceNo])
 }
 
 model Transfer {
-  id Int @id @default(autoincrement())
-  number String @unique
-  poId Int
-  kind TransferKind
-  fromCode String
-  toCode String
-  status TransferStatus @default(WAITING_RECEIVE)
-  po ProductionOrder @relation(fields: [poId], references: [id])
-  lines TransferLine[]
-  createdAt DateTime @default(now())
+  id        Int             @id @default(autoincrement())
+  number    String          @unique
+  poId      Int
+  kind      TransferKind
+  fromCode  String
+  toCode    String
+  status    TransferStatus  @default(WAITING_RECEIVE)
+  po        ProductionOrder @relation(fields: [poId], references: [id])
+  lines     TransferLine[]
+  createdAt DateTime        @default(now())
+
   @@unique([poId, kind])
 }
 
 model TransferLine {
-  id Int @id @default(autoincrement())
+  id         Int      @id @default(autoincrement())
   transferId Int
-  itemId Int
-  lotCode String
-  qty Decimal @db.Decimal(18, 4)
-  transfer Transfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
-  item Item @relation(fields: [itemId], references: [id])
+  itemId     Int
+  lotCode    String
+  qty        Decimal  @db.Decimal(18, 4)
+  transfer   Transfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  item       Item     @relation(fields: [itemId], references: [id])
 }
 
 model ProductionResult {
-  id Int @id @default(autoincrement())
-  number String @unique
-  poId Int @unique
-  fgLot String
-  good Decimal @db.Decimal(18, 4)
-  reject Decimal @db.Decimal(18, 4)
+  id           Int             @id @default(autoincrement())
+  number       String          @unique
+  poId         Int             @unique
+  fgLot        String
+  good         Decimal         @db.Decimal(18, 4)
+  reject       Decimal         @db.Decimal(18, 4)
   rejectReason String?
-  po ProductionOrder @relation(fields: [poId], references: [id])
-  createdAt DateTime @default(now())
+  po           ProductionOrder @relation(fields: [poId], references: [id])
+  createdAt    DateTime        @default(now())
 }
 
 model AuditLog {
-  id Int @id @default(autoincrement())
-  actorId Int?
-  actor User? @relation(fields: [actorId], references: [id])
-  event String
+  id        Int      @id @default(autoincrement())
+  actorId   Int?
+  actor     User?    @relation(fields: [actorId], references: [id])
+  event     String
   reference String
-  detail Json?
+  detail    Json?
   createdAt DateTime @default(now())
 }
 
 model NumberSequence {
-  key String @id
-  value Int @default(0)
+  key   String @id
+  value Int    @default(0)
 }
